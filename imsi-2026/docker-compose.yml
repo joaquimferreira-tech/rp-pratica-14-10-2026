@@ -1,0 +1,73 @@
+name: imsi-2026
+
+services:
+
+  database:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_PASSWORD: ${PGPASS}
+      POSTGRES_DB: ${PGDATABASE}
+      POSTGRES_USER: ${PGUSER}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    networks:
+      - imsi-2026
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      target: backend
+    image: imsi-backend:1.0
+    environment:
+      DB_USER: ${PGUSER}
+      DB_PASS: ${PGPASS}
+      DB_HOST: database
+      DB_NAME: ${PGDATABASE}
+      DB_PORT: ${PGPORT:-5432}
+    networks:
+      - imsi-2026
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:3000/frutas').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      database:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      target: frontend
+    image: imsi-frontend:1.0
+    ports:
+      - "8080:8080"
+    networks:
+      - imsi-2026
+    depends_on:
+      backend:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  postgres-data:  
+
+networks:
+  imsi-2026:
